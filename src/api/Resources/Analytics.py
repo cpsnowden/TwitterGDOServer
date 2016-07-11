@@ -1,14 +1,13 @@
-import api.Utils.MetaID as MetaID
-from api.Auth import Resource
-from api.Objects.MetaData import AnalyticsMeta, DatasetMeta, DictionaryWrap
-from flask_restful import reqparse, marshal_with, fields, abort, marshal
-from flask import Response, make_response, redirect, url_for
-from mongoengine.queryset import DoesNotExist
-import requests
-from src.AnalyticsService.AnalyticsTasks import generate_graph
 import logging
-import gridfs
 
+import gridfs
+import src.api.Utils.MetaID as MetaID
+from flask import make_response
+from flask_restful import reqparse, marshal_with, fields, abort
+from mongoengine.queryset import DoesNotExist
+from src.AnalyticsService.AnalyticsTasks import get_analytics
+from src.api.Auth import Resource
+from src.api.Objects.MetaData import AnalyticsMeta, DatasetMeta, DictionaryWrap
 
 analytics_meta_fields = {
     "type": fields.String,
@@ -51,7 +50,7 @@ class AnalyticsList(Resource):
 
         analytics_meta.save()
 
-        generate_graph.delay(analytics_meta.id)
+        get_analytics.delay(analytics_meta.id)
 
         return analytics_meta
 
@@ -106,9 +105,13 @@ class AnalyticsData(Resource):
 
         f = self.dbm.gridfs.get_last_version(found.db_ref)
 
-        response = make_response(f.read())
-        response.headers["Content-Disposition"] = "attachment; filename=books.csv"
+        a = f.read()
+        # self.logger.warn(a)
 
+        response = make_response(a)
+
+        response.headers["Content-Disposition"] = "attachment"
+        response.headers["mimetype"] = "text/plain"
         return response
 
     def delete(self, dataset_id, analytics_id):

@@ -1,4 +1,4 @@
-from TwitterService.TwitterSource import TwitterSource
+from src.DataService.TwitterService.TwitterSource import TwitterSource
 
 
 class DataService(object):

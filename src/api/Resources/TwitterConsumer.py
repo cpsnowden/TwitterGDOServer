@@ -1,4 +1,4 @@
-from api.Auth import Resource
+from src.api.Auth import Resource
 from flask_restful import marshal_with, fields, abort
 
 twitter_consumer_meta = {

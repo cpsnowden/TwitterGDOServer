@@ -1,6 +1,6 @@
-from api.Auth import Resource
-from api.Objects.MetaData import DatasetMeta
-from api.Utils import MetaID
+from src.api.Auth import Resource
+from src.api.Objects.MetaData import DatasetMeta
+from src.api.Utils import MetaID
 from flask_restful import reqparse, marshal_with, fields, abort
 from mongoengine.queryset import DoesNotExist
 import logging

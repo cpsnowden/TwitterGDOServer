@@ -3,55 +3,51 @@ from datetime import datetime
 
 import networkx as nx
 import pymongo
+from dateutil import parser
+from src.AnalyticsService.AnalyticsUtils import AnalyticsUtils
 from src.AnalyticsService.Graphing.GraphUtils import GraphColor
+from src.AnalyticsService.Graphing.GraphUtils import GraphUtils
 from src.AnalyticsService.Graphing.MentionGraph import MentionGraph
 from src.AnalyticsService.Graphing.RetweetGraph import RetweetGraph
-from src.AnalyticsService.TwitterObj import Status
-from dateutil import parser
-from src.AnalyticsService.Graphing.GraphUtils import GraphUtils
-from src.Database.Persistence import DatabaseManager
-from src.api.Objects.MetaData import DatasetMeta
-
-
-def get_schema_id(db_col):
-    T4J_cols = [
-        "DS_2db92824-be5d-47ee-b746-a3a2ddda1863",
-        "DS_df6fd789-6728-4903-8f1a-b29c12ea4928"
-    ]
-
-    if db_col in T4J_cols:
-        return "T4J"
-    else:
-        return "RAW"
+from src.AnalyticsService.TwitterObj import Status, User
 
 
 class Graph(object):
     _logger = logging.getLogger(__name__)
 
     @classmethod
-    def get_graph(cls, analytics_meta):
-        graph_options = {
-        "Mention_Time_Graph": Graph.get_mention_time_graph,
-        "Retweet_Time_Graph": Graph.get_retweet_time_graph
-        }
-
-        graph_constructor = graph_options[analytics_meta.type]
-        return graph_constructor(analytics_meta)
-
-    @classmethod
     def get_retweet_time_graph(cls, analytics_meta):
 
         cls._logger.info("Attempting retweet time graph")
 
-        gridfs, db_col, args, schema_id = cls.setup(analytics_meta)
+        gridfs, db_col, args, schema_id = AnalyticsUtils.setup(analytics_meta)
 
         quantum_s = args["Time_Quantum_s"]
         tweet_limit = args["Tweet_Limit"]
         start_date = parser.parse(args["Start_Date_Lim"])
         end_date = parser.parse(args["End_Date_Lim"])
+        limit_top_source = args["Limit_Sources"]
 
-        query = {Status.SCHEMA_MAP[schema_id]["retweeted_status"]: {"$exists":True,"$ne":None},
-                 Status.SCHEMA_MAP[schema_id]["created_at"]: {"$gte": start_date, "$lte": end_date}}
+        user_id_key = Status.SCHEMA_MAP[schema_id]["user"] + "." + User.SCHEMA_MAP[schema_id]["id"]
+        cls._logger.info("User id key %s", user_id_key)
+
+        top_user_query  = [
+            {"$match": {Status.SCHEMA_MAP[schema_id]["retweeted_status"]: {"$exists": True, "$ne": None}}},
+            {"$group": {"_id": {'id': '$' + user_id_key}, "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}},
+            {"$limit": limit_top_source}
+        ]
+
+        cls._logger.info("Query for top retweeting users %s", top_user_query)
+
+        top_users = db_col.aggregate(top_user_query, allowDiskUse=True)
+
+        source_users = [user["_id"]["id"] for user in top_users]
+        print source_users
+
+        query = {Status.SCHEMA_MAP[schema_id]["retweeted_status"]: {"$exists": True, "$ne": None},
+                 Status.SCHEMA_MAP[schema_id]["created_at"]: {"$gte": start_date, "$lte": end_date},
+                 user_id_key: {"$in": source_users}}
 
         cursor = cls.get_cursor(db_col, query, schema_id, tweet_limit)
         if cursor is None:
@@ -72,15 +68,23 @@ class Graph(object):
         analytics_meta.status = "COLORED"
         analytics_meta.save()
 
-        cls.export(analytics_meta, gridfs, graph)
+        AnalyticsUtils.export(analytics_meta, gridfs, graph, cls.save_graphml)
 
+        GraphUtils.fix_graphml_format(analytics_meta.db_ref, gridfs)
+
+        cls._logger.info("Saved GDO fomatted graph %s", analytics_meta.db_ref)
+        analytics_meta.status = "SAVED"
+        analytics_meta.end_time = datetime.now()
+        analytics_meta.save()
+
+        return True
 
     @classmethod
     def get_mention_time_graph(cls, analytics_meta):
 
         cls._logger.info("Attempting mention time graph")
 
-        gridfs, db_col, args, schema_id = cls.setup(analytics_meta)
+        gridfs, db_col, args, schema_id = AnalyticsUtils.setup(analytics_meta)
 
         quantum_s = args["Time_Quantum_s"]
         tweet_limit = args["Tweet_Limit"]
@@ -110,37 +114,21 @@ class Graph(object):
         analytics_meta.status = "COLORED"
         analytics_meta.save()
 
-        cls.export(analytics_meta, gridfs, graph)
-
-    @classmethod
-    def setup(cls, analytics_meta):
-
-        dataset_meta = DatasetMeta.objects.get(id=analytics_meta.dataset_id)
-        schema_id = get_schema_id(analytics_meta.dataset_id)
-
-        dbm = DatabaseManager()
-        db_col = dbm.data_db.get_collection(dataset_meta.db_col)
-
-        args = dict([(k, v["value"]) for k, v in analytics_meta.specialised_args.items()])
-
-        cls._logger.info("Found arguments %s", str(args))
-        cls._logger.info("Using schema: %s", schema_id)
-
-        return dbm.gridfs, db_col, args, schema_id
-
-    @classmethod
-    def export(cls, analytics_meta, gridfs, graph):
-
-        Graph.save_to_gridfs(graph, analytics_meta.db_ref, gridfs)
-        cls._logger.info("Saved networkx formatted graph %s", analytics_meta.db_ref)
-        analytics_meta.status = "SAVED UNFORMATTED"
-        analytics_meta.save()
+        AnalyticsUtils.export(analytics_meta, gridfs, graph, cls.save_graphml)
 
         GraphUtils.fix_graphml_format(analytics_meta.db_ref, gridfs)
+
         cls._logger.info("Saved GDO fomatted graph %s", analytics_meta.db_ref)
         analytics_meta.status = "SAVED"
         analytics_meta.end_time = datetime.now()
         analytics_meta.save()
+
+        return True
+
+    @classmethod
+    def save_graphml(cls, graph, name, gridfs):
+        with gridfs.new_file(filename=name, content_type="text/xml") as f:
+            nx.write_graphml(graph, f)
 
     @classmethod
     def get_cursor(cls, db_col, query, schema_id, tweet_limit):
@@ -160,15 +148,7 @@ class Graph(object):
 
         return cursor
 
-
     @classmethod
     def save_to_path(cls, graph, name):
         nx.write_graphml(graph, name)
-
-    @classmethod
-    def save_to_gridfs(cls, graph, name, gridfs):
-        with gridfs.new_file(filename=name, content_type="text/xml") as f:
-            nx.write_graphml(graph, f)
-
-
 

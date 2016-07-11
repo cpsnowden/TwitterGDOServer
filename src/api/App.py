@@ -1,12 +1,13 @@
 import logging
 
-import Resources.Analytics
+
 import flask_restful
 import yaml
-from DataService.DataService import DataService
-from Database.Persistence import DatabaseManager
-from Resources.Dataset import Dataset, DatasetList, DatasetStatus
-from Resources.TwitterConsumer import TwitterConsumer, TwitterConsumerList
+from src.DataService.DataService import DataService
+from src.Database.Persistence import DatabaseManager
+from src.api.Resources.Dataset import Dataset, DatasetList, DatasetStatus
+from src.api.Resources.TwitterConsumer import TwitterConsumer, TwitterConsumerList
+from src.api.Resources.Analytics import *
 from flask import Flask
 
 logging.basicConfig(level=logging.INFO)
@@ -28,10 +29,10 @@ api.add_resource(TwitterConsumer, '/API/twitter_consumer/<consumer_id>', resourc
 api.add_resource(TwitterConsumerList, '/API/twitter_consumer', resource_class_kwargs={
     'twitter_service': data_service.twitter_service})
 
-api.add_resource(Resources.Analytics.AnalyticsList, '/API/dataset/<dataset_id>/analytics')
-api.add_resource(Resources.Analytics.Analytics, '/API/dataset/<dataset_id>/analytics/<analytics_id>',
+api.add_resource(AnalyticsList, '/API/dataset/<dataset_id>/analytics')
+api.add_resource(Analytics, '/API/dataset/<dataset_id>/analytics/<analytics_id>',
                  resource_class_kwargs = {'dbm': dbm})
-api.add_resource(Resources.Analytics.AnalyticsData, '/API/dataset/<dataset_id>/analytics/<analytics_id>/data',
+api.add_resource(AnalyticsData, '/API/dataset/<dataset_id>/analytics/<analytics_id>/data',
                  resource_class_kwargs = {'dbm': dbm}, endpoint = "AnalyticsData")
 
 if __name__ == '__main__':
