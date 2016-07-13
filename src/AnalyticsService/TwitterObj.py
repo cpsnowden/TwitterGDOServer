@@ -3,10 +3,10 @@ from dateutil import parser
 
 class Status(object):
     T4J = dict(hashtags="hashtagEntities", mentions="userMentionEntities", user="user", text="text",
-               created_at="createdAt", id="id", retweeted_status="retweetedStatus")
+               created_at="createdAt", id="id", retweeted_status="retweetedStatus", language="lang", ISO_date = "createdAt")
 
     RAW = dict(hashtags="entities.hashtags", mentions="entities.user_mentions", user="user", text="text",
-               created_at="created_at", id="id", retweeted_status="retweeted_status")
+               created_at="created_at", id="id", retweeted_status="retweeted_status", language="lang", ISO_date = "ISO_created_at")
 
     SCHEMA_MAP = {
         "T4J": T4J,

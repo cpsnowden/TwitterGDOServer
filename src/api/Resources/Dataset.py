@@ -2,6 +2,7 @@ from src.api.Auth import Resource
 from src.api.Objects.MetaData import DatasetMeta
 from src.api.Utils import MetaID
 from flask_restful import reqparse, marshal_with, fields, abort
+from flask import jsonify
 from mongoengine.queryset import DoesNotExist
 import logging
 
@@ -14,12 +15,26 @@ dataset_meta_fields = {
     "endDate": fields.DateTime(attribute="end_time"),
     "status": fields.String,
     "db_col": fields.String,
-    "filterSize": fields.Integer(attribute="collection_size")
+    "filterSize": fields.Integer(attribute="collection_size"),
+    "schema": fields.String
 }
 
 status_meta_fields = {
     "status": fields.String
 }
+
+
+class DataServiceR(Resource):
+    logger = logging.getLogger(__name__)
+
+    def __init__(self, **kwargs):
+        self.data_service = kwargs["data_service"]
+
+    def get(self):
+
+        status = self.data_service.get_status()
+        print status
+        return jsonify(status)
 
 
 class Dataset(Resource):
@@ -32,14 +47,14 @@ class Dataset(Resource):
     def get(self, dataset_id):
 
         try:
-            return DatasetMeta.objects.get(consumer_id=dataset_id)
+            return DatasetMeta.objects.get(id=dataset_id)
         except DoesNotExist:
             abort(404, message="Dataset {} does not exist".format(dataset_id))
 
     def delete(self, dataset_id):
 
         try:
-            found = DatasetMeta.objects.get(consumer_id=dataset_id)
+            found = DatasetMeta.objects.get(id=dataset_id)
             self.data_service.delete(found)
             found.delete()
         except DoesNotExist:

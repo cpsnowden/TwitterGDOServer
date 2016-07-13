@@ -13,12 +13,12 @@ def get_analytics(analytics_id):
 
     analytics_meta = AnalyticsMeta.objects.get(id=analytics_id)
 
-    try:
-        result = AnalyticsEngine.get_analytics(analytics_meta)
-        print result
-    except Exception as e:
-        logger.exception()
-        result = False
+    # try:
+    result = AnalyticsEngine.get_analytics(analytics_meta)
+    print result
+    # except Exception as e:
+    #     logger.exception()
+    #     result = False
 
     print result
     if not result:

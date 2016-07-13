@@ -33,3 +33,10 @@ class DataService(object):
 
         if status == "STOPPED" and dataset_meta.status != "STOPPED":
             self.stop(dataset_meta)
+
+    def get_status(self):
+
+        statuses = []
+        for switch_key in self.switch.keys():
+            statuses.append({"name":switch_key,"status":self.switch[switch_key].get_status()})
+        return statuses

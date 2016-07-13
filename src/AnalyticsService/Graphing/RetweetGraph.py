@@ -29,7 +29,9 @@ class RetweetGraph(object):
                            type="tweet",
                            date=str(status.get_created_at()),
                            gravity_x=float(time_step),
-                           gravity_y=float(0))
+                           gravity_y=float(0),
+                           gravity_y_strength = float(0.01),
+                           gravity_x_strength=float(10.0))
 
             source_user = status.get_user()
             RetweetGraph.add_user_node(graph, source_user, time_step, tweet_id, "source", history)
@@ -48,10 +50,22 @@ class RetweetGraph(object):
                        label="usr:" + user_name,
                        type=type,
                        gravity_x=float(time_step),
-                       gravity_y=RetweetGraph.get_gravity_y("user", user_name))
+                       gravity_y=RetweetGraph.get_gravity_y("user", user_name),
+                       gravity_y_strength = RetweetGraph.get_gravity_y_strength("user", user_name),
+                       gravity_x_strength = float(10.0))
 
         graph.add_edge(node_id, tweet_id, type=type)
         GraphUtils.link_node_to_history(graph, history, node_id, user_id)
+
+    @staticmethod
+    def get_gravity_y_strength(node_type, tweet=None):
+
+        if node_type == "user":
+            if tweet == "StrongerIn":
+                return float(100)
+            elif tweet == "vote_leave":
+                return float(100)
+            return float(0.01)
 
     @staticmethod
     def get_gravity_y(node_type, tweet=None):

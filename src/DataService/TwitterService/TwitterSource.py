@@ -1,6 +1,7 @@
 from src.DataService.TwitterService.TwitterStreamer import TwitterStreamProvider
 from src.DataService.TwitterService.TwitterConsumer import RouterManager
 import datetime
+from pymongo import ASCENDING
 import logging
 
 
@@ -19,9 +20,23 @@ class TwitterSource(object):
         if db_col in self.dbm.data_db.collection_names():
             self.dbm.data_db.get_collection(db_col).drop()
 
+    def setup_collection(self, name):
+
+        self.dbm.data_db.get_collection(name).create_index([("ISO_created_at",ASCENDING)])
+        self.dbm.data_db.get_collection(name).create_index([("id", ASCENDING)], unique=True)
+
+    def get_status(self):
+
+        return self.streamer.status.get()
+
     def add(self, dataset_info):
 
-        logging.info("Adding twitter sourced dataset %s", dataset_info.description)
+        db_col = dataset_info.db_col
+        logging.info("Adding twitter sourced dataset %s", dataset_info.db_col)
+        if db_col not in self.dbm.data_db.collection_names():
+            self.logger.info("Setting up new collection for %s", db_col)
+            self.setup_collection(db_col)
+
 
         self.pipes.append(dataset_info)
         self.streamer.run(self.get_tracking_terms())

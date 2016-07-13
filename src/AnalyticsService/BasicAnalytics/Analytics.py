@@ -13,6 +13,8 @@ class BasicAnalytics(object):
     @classmethod
     def get_basic_stats(cls, analytics_meta):
 
+        cls._logger.info("Attempting to get basic stats")
+
         data = {}
 
         gridfs, db_col, args, schema_id = AnalyticsUtils.setup(analytics_meta)
@@ -22,6 +24,10 @@ class BasicAnalytics(object):
         if hashtag_limit > 0:
             name, d = BasicAnalytics.get_top_hashtags(schema_id, hashtag_limit, db_col)
             data[name] = d
+        name, d = BasicAnalytics.get_languages(schema_id, db_col)
+        data[name] = d
+        name, d = BasicAnalytics.get_retweet_authored_dist(schema_id, db_col)
+        data[name] = d
 
         AnalyticsUtils.export(analytics_meta, gridfs, json.dumps(data), AnalyticsUtils.write_json)
 
@@ -31,6 +37,32 @@ class BasicAnalytics(object):
         analytics_meta.save()
 
         return True
+
+    @classmethod
+    def get_languages(cls, schema_id, db_col):
+
+        cls._logger.info("Attempting to get languages")
+
+        lang_key = Status.SCHEMA_MAP[schema_id]["language"]
+
+        query = [
+            {"$group": {"_id": {'id': '$' + lang_key}, "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}},
+        ]
+
+        top_hastags = db_col.aggregate(query, allowDiskUse=True)
+
+        return ("top_languages", list(top_hastags))
+
+    @classmethod
+    def get_retweet_authored_dist(cls, schema_id, db_col):
+
+        cls._logger.info("Attempting to get retweet distribution")
+
+        total = db_col.count()
+        retweeted = db_col.find({Status.SCHEMA_MAP[schema_id]["retweeted_status"]: {"$exists": False}}).count()
+
+        return ("type_dist",{"retweets":retweeted, "non_retweets":total-retweeted})
 
     @classmethod
     def get_top_hashtags(cls, schema_id, limit, db_col):
@@ -73,7 +105,7 @@ class BasicAnalytics(object):
             name, d = BasicAnalytics.get_top_mentioned(schema_id, mention_limit, db_col)
             data[name] = d
         if original_author_limit > 0:
-            name, d = BasicAnalytics.get_top_authors(schema_id, mention_limit, db_col)
+            name, d = BasicAnalytics.get_top_authors(schema_id, original_author_limit, db_col)
             data[name] = d
 
         AnalyticsUtils.export(analytics_meta, gridfs, json.dumps(data), AnalyticsUtils.write_json)

@@ -1,10 +1,11 @@
 import json
 import logging
 import multiprocessing
-
+from dateutil import parser
 import os
 import pika
-
+from pymongo.errors import DuplicateKeyError
+from src.AnalyticsService.TwitterObj import Status
 
 class RouterManager(object):
     logger = logging.getLogger(__name__)
@@ -42,7 +43,8 @@ class RouterManager(object):
         filter_request = FilterRequest(dataset_info.id,
                                        dataset_info.description,
                                        [t.lstrip("#") for t in dataset_info.tags],
-                                       dataset_info.db_col)
+                                       dataset_info.db_col,
+                                       dataset_info.schema)
 
         self.routerItems[dataset_info.id] = filter_request
         self.n_filters += 1
@@ -74,11 +76,12 @@ class RouterManager(object):
 
 
 class FilterRequest(object):
-    def __init__(self, filter_id, description, keys, db_col):
+    def __init__(self, filter_id, description, keys, db_col, schema):
         self.keys = [k.lower() for k in keys]
         self.description = description
         self.id = filter_id
         self.db_col = db_col
+        self.schema = schema
 
     def __repr__(self):
         return self.keys, self.description
@@ -119,7 +122,12 @@ class Router(object):
             hashtags = [h["text"].lower() for h in json_status["entities"]["hashtags"]]
 
             if any(ht in hashtags for ht in f.keys):
-                self.dbm.data_db.get_collection(f.db_col).insert(json_status)
+                created_date_string = json_status[Status.SCHEMA_MAP[f.schema]["created_at"]]
+                json_status["ISO_created_at"] = parser.parse(created_date_string)
+                try:
+                    self.dbm.data_db.get_collection(f.db_col).insert(json_status)
+                except DuplicateKeyError:
+                    self.logger.exception("Duplicate tweet id ignoring")
 
                 self.logger.info("id: %d descr: %s user: %s text: %s", self.id, f.description,
                                  json_status["user"]["screen_name"],

@@ -23,15 +23,13 @@ class AnalyticsUtils(object):
     @classmethod
     def setup(cls, analytics_meta):
         dataset_meta = DatasetMeta.objects.get(id=analytics_meta.dataset_id)
-        schema_id = get_schema_id(analytics_meta.dataset_id)
-
+        schema_id = dataset_meta.schema
         dbm = DatabaseManager()
         db_col = dbm.data_db.get_collection(dataset_meta.db_col)
 
         args = dict([(k, v["value"]) for k, v in analytics_meta.specialised_args.items()])
 
         cls._logger.info("Found arguments %s", str(args))
-        cls._logger.info("Using schema: %s", schema_id)
 
         return dbm.gridfs, db_col, args, schema_id
 

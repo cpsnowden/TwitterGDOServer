@@ -90,10 +90,15 @@ class GraphColor(object):
     def color_nodes(graph, mapping):
 
         key, color_map = mapping
-
+        print mapping
         for nid in graph.nodes():
             node = graph.node[nid]
-            GraphColor.color_element_from_rgb(node, color_map.get(node[key], "grey"))
+            try:
+                t = node[key]
+            except KeyError:
+                print "Could not get key on ", node
+                t = "grey"
+            GraphColor.color_element_from_rgb(node, color_map.get(t, "grey"))
 
         return graph
 

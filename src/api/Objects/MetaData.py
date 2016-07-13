@@ -17,6 +17,7 @@ class DatasetMeta(Document):
     start_time = DateTimeField(required=True, default=datetime.datetime.now())
     end_time = DateTimeField()
     collection_size = LongField(default=0)
+    schema = StringField(default="RAW", choices=["RAW","T4J"])
 
     meta = {"db_alias": "meta_data_db"}
 
@@ -31,6 +32,7 @@ class AnalyticsMeta(Document):
     end_time = DateTimeField()
     meta = {"db_alias": "meta_data_db"}
     specialised_args = DictField()
+
 
 
 class DictionaryWrap(fields.Raw):
