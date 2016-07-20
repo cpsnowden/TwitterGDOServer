@@ -5,7 +5,7 @@ from dateutil import parser
 import os
 import pika
 from pymongo.errors import DuplicateKeyError
-from src.AnalyticsService.TwitterObj import Status
+from AnalyticsService.TwitterObj import Status
 
 class RouterManager(object):
     logger = logging.getLogger(__name__)

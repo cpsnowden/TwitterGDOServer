@@ -23,6 +23,8 @@ class DatasetMeta(Document):
 
 
 class AnalyticsMeta(Document):
+    description = StringField()
+    classification = StringField(required=True)
     type = StringField(required=True)
     db_ref = StringField(required=True)
     status = StringField(required=True, default="ORDERED")

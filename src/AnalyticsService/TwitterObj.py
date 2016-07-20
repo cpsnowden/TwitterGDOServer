@@ -42,7 +42,10 @@ class Status(object):
         return self.get("id")
 
     def get_retweet_status(self):
-        return Status(self.get("retweeted_status"), self.SCHEMA_ID)
+        try:
+            return Status(self.get("retweeted_status"), self.SCHEMA_ID)
+        except KeyError:
+            return None
 
 
 def conv_dt(raw):
@@ -51,8 +54,6 @@ def conv_dt(raw):
 
 def conv_json_dt(raw):
     return parser.parse(raw)
-    # return datetime.strptime(raw, "%a %b %d %H:%M:%S %z %Y")
-
 
 class TwitterDate(object):
     SCHEMA_MAP = {
@@ -120,6 +121,12 @@ class UserMention(object):
 
     def get_user_id(self):
         return self.get("id")
+
+    def get_name(self):
+        return self.get_user_name()
+
+    def get_id(self):
+        return self.get_user_id()
 
     def get_user_name(self):
         return self.item.get(self.SCHEMA["name"])

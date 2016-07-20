@@ -1,13 +1,10 @@
-import logging
-
-
 import flask_restful
 import yaml
-from src.DataService.DataService import DataService
-from src.Database.Persistence import DatabaseManager
-from src.api.Resources.Dataset import Dataset, DatasetList, DatasetStatus, DataServiceR
-from src.api.Resources.TwitterConsumer import TwitterConsumer, TwitterConsumerList
-from src.api.Resources.Analytics import *
+from DataService.DataService import DataService
+from Database.Persistence import DatabaseManager
+from api.Resources.Analytics import *
+from api.Resources.Dataset import Dataset, DatasetList, DatasetStatus, DataServiceR
+from api.Resources.TwitterConsumer import TwitterConsumer, TwitterConsumerList
 from flask import Flask
 
 logging.basicConfig(level=logging.INFO)
@@ -36,6 +33,8 @@ api.add_resource(Analytics, '/API/dataset/<dataset_id>/analytics/<analytics_id>'
 api.add_resource(AnalyticsData, '/API/dataset/<dataset_id>/analytics/<analytics_id>/data',
                  resource_class_kwargs = {'dbm': dbm}, endpoint = "AnalyticsData")
 api.add_resource(DataServiceR, '/API/data_service', resource_class_kwargs={'data_service': data_service} )
+
+api.add_resource(AnalyticsOptions, '/API/analytics_options')
 
 if __name__ == '__main__':
     app.run(debug=True, use_reloader=False)

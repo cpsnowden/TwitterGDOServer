@@ -1,209 +1,46 @@
 import logging
+import json
+import networkx as nx
 from datetime import datetime
 
-import networkx as nx
-import pymongo
-from dateutil import parser
-from src.AnalyticsService.AnalyticsUtils import AnalyticsUtils
-from src.AnalyticsService.Graphing.GraphUtils import GraphColor
-from src.AnalyticsService.Graphing.GraphUtils import GraphUtils
-from src.AnalyticsService.Graphing.MentionGraph import MentionGraph
-from src.AnalyticsService.Graphing.MentionGraphSimple import MentionGraphSimple
-from src.AnalyticsService.Graphing.CommunityRetweetGraph import CommunityRetweetGraph
-from src.AnalyticsService.Graphing.RetweetGraph import RetweetGraph
-from src.AnalyticsService.TwitterObj import Status, User
+from AnalyticsService.Graphing.GraphUtils import GraphColor, GraphUtils
+from AnalyticsService.TwitterObj import Status
+from AnalyticsService.AnalysisTemplate import AnalysisTemplate
+from pymongo import ASCENDING
+from networkx import write_graphml
+from AnalyticsService.Graphing.GephiRPC.GephiRPC import GephiRpcClient
+
+class Graph(AnalysisTemplate):
+    _logging = logging.getLogger(__name__)
 
 
-class Graph(object):
-    _logger = logging.getLogger(__name__)
-
+    __arguments = [{"name": "tweetLimit", "prettyName": "Tweet limit", "type": "integer", "default": -1},
+                   {"name": "startDateCutOff", "prettyName": "Start date cut-off", "type": "datetime",
+                    "default_dataset_field": "start_time"},
+                   {"name": "endDateCutOff", "prettyName": "End date cut-off", "type": "datetime",
+                    "default_dataset_field": "end_time"},
+                   {"name": "layoutIterations", "prettyName": "Layout Iterations", "type": "integer",
+                    "default": -1},
+                   {"name": "LAYOUT_ALGO", "prettyName": "Layout Algorithm", "type": "enum", "options":
+                       ["FA2MS"], "default" : "FA2MS"}
+                   ]
     @classmethod
-    def get_community_retweet_graph(cls, analytics_meta):
+    def get_args(cls):
+        return cls.__arguments + super(Graph, cls).get_args()
 
-        cls._logger.info("Attempting retweet community graph")
-
-        gridfs, db_col, args, schema_id = AnalyticsUtils.setup(analytics_meta)
-
-        tweet_limit = args["Tweet_Limit"]
-        start_date = parser.parse(args["Start_Date_Lim"])
-        end_date = parser.parse(args["End_Date_Lim"])
-
-        query = {Status.SCHEMA_MAP[schema_id]["retweeted_status"]: {"$exists": True, "$ne": None},
-                 Status.SCHEMA_MAP[schema_id]["ISO_date"]: {"$gte": start_date, "$lte": end_date}}
-        cls._logger.info("Getting cursor")
-        cursor = cls.get_cursor(db_col, query, schema_id, tweet_limit)
-        if cursor is None:
-            analytics_meta.status = "NO DATA IN RANGE"
-            analytics_meta.save()
-
-        graph = nx.DiGraph()
-        cls._logger.info("Getting graph")
-        CommunityRetweetGraph.get_graph(graph, cursor, schema_id)
-
-        cls._logger.info("Build graph %s", analytics_meta.id)
-        analytics_meta.status = "BUILT"
-        analytics_meta.save()
-
-        # Layout Call
-
-        GraphColor.color_graph(graph, CommunityRetweetGraph.color)
-        cls._logger.info("Colored graph %s", analytics_meta.id)
-        analytics_meta.status = "COLORED"
-        analytics_meta.save()
-
-        AnalyticsUtils.export(analytics_meta, gridfs, graph, cls.save_graphml)
-
-        GraphUtils.fix_graphml_format(analytics_meta.db_ref, gridfs)
-
-        cls._logger.info("Saved GDO fomatted graph %s", analytics_meta.db_ref)
-        analytics_meta.status = "SAVED"
-        analytics_meta.end_time = datetime.now()
-        analytics_meta.save()
-
-        return True
-
-
-    @classmethod
-    def get_retweet_time_graph(cls, analytics_meta):
-
-        cls._logger.info("Attempting retweet time graph")
-
-        gridfs, db_col, args, schema_id = AnalyticsUtils.setup(analytics_meta)
-
-        quantum_s = args["Time_Quantum_s"]
-        tweet_limit = args["Tweet_Limit"]
-        start_date = parser.parse(args["Start_Date_Lim"])
-        end_date = parser.parse(args["End_Date_Lim"])
-        limit_top_source = args["Limit_Sources"]
-
-        user_id_key = Status.SCHEMA_MAP[schema_id]["user"] + "." + User.SCHEMA_MAP[schema_id]["id"]
-        cls._logger.info("User id key %s", user_id_key)
-
-        top_user_query  = [
-            {"$match": {Status.SCHEMA_MAP[schema_id]["retweeted_status"]: {"$exists": True, "$ne": None}}},
-            {"$group": {"_id": {'id': '$' + user_id_key}, "count": {"$sum": 1}}},
-            {"$sort": {"count": -1}},
-            {"$limit": limit_top_source}
-        ]
-
-        cls._logger.info("Query for top retweeting users %s", top_user_query)
-
-        top_users = db_col.aggregate(top_user_query, allowDiskUse=True)
-
-        source_users = [user["_id"]["id"] for user in top_users]
-
-        query = {Status.SCHEMA_MAP[schema_id]["retweeted_status"]: {"$exists": True, "$ne": None},
-                 Status.SCHEMA_MAP[schema_id]["ISO_date"]: {"$gte": start_date, "$lte": end_date},
-                 user_id_key: {"$in": source_users}}
-
-        cursor = cls.get_cursor(db_col, query, schema_id, tweet_limit)
-        if cursor is None:
-            analytics_meta.status = "NO DATA IN RANGE"
-            analytics_meta.save()
-
-        graph = nx.Graph()
-        RetweetGraph.get_graph(graph, cursor, schema_id, quantum_s)
-
-        cls._logger.info("Build graph %s", analytics_meta.id)
-        analytics_meta.status = "BUILT"
-        analytics_meta.save()
-
-        # Layout Call
-
-        GraphColor.color_graph(graph, RetweetGraph.color)
-        cls._logger.info("Colored graph %s", analytics_meta.id)
-        analytics_meta.status = "COLORED"
-        analytics_meta.save()
-
-        AnalyticsUtils.export(analytics_meta, gridfs, graph, cls.save_graphml)
-
-        GraphUtils.fix_graphml_format(analytics_meta.db_ref, gridfs)
-
-        cls._logger.info("Saved GDO fomatted graph %s", analytics_meta.db_ref)
-        analytics_meta.status = "SAVED"
-        analytics_meta.end_time = datetime.now()
-        analytics_meta.save()
-
-        return True
-
-    @classmethod
-    def get_mention_time_graph(cls, analytics_meta):
-
-        cls._logger.info("Attempting mention time graph")
-
-        gridfs, db_col, args, schema_id = AnalyticsUtils.setup(analytics_meta)
-
-        quantum_s = args["Time_Quantum_s"]
-        tweet_limit = args["Tweet_Limit"]
-        start_date = parser.parse(args["Start_Date_Lim"])
-        end_date = parser.parse(args["End_Date_Lim"])
-        limit_top_source = args["Limit_Sources"]
-
-        user_id_key = Status.SCHEMA_MAP[schema_id]["user"] + "." + User.SCHEMA_MAP[schema_id]["id"]
-        cls._logger.info("User id key %s", user_id_key)
-
-        top_user_query = [
-            {"$match": {Status.SCHEMA_MAP[schema_id]["retweeted_status"]: {"$exists": False},
-                        Status.SCHEMA_MAP[schema_id]["mentions"]: {"$gt": []}}},
-            {"$group": {"_id": {'id': '$' + user_id_key}, "count": {"$sum": 1}}},
-            {"$sort": {"count": -1}},
-            {"$limit": limit_top_source}
-        ]
-
-        cls._logger.info("Query for top mentioning users %s", top_user_query)
-
-        top_users = db_col.aggregate(top_user_query, allowDiskUse=True)
-
-        source_users = [user["_id"]["id"] for user in top_users]
-
-        query = {Status.SCHEMA_MAP[schema_id]["mentions"]: {"$gt": []},
-                 Status.SCHEMA_MAP[schema_id]["retweeted_status"]: None,
-                 Status.SCHEMA_MAP[schema_id]["ISO_date"]: {"$gte": start_date, "$lte": end_date},
-                 user_id_key: {"$in": source_users}}
-
-        cursor = cls.get_cursor(db_col, query, schema_id, tweet_limit)
-        if cursor is None:
-            analytics_meta.status = "NO DATA IN RANGE"
-            analytics_meta.save()
-
-        graph = nx.Graph()
-        MentionGraph.get_graph(graph, cursor, schema_id, quantum_s)
-
-        cls._logger.info("Build graph %s", analytics_meta.id)
-        analytics_meta.status = "BUILT"
-        analytics_meta.save()
-
-        # Layout Call
-
-        GraphColor.color_graph(graph, MentionGraph.color)
-        cls._logger.info("Colored graph %s", analytics_meta.id)
-        analytics_meta.status = "COLORED"
-        analytics_meta.save()
-
-        AnalyticsUtils.export(analytics_meta, gridfs, graph, cls.save_graphml)
-
-        GraphUtils.fix_graphml_format(analytics_meta.db_ref, gridfs)
-
-        cls._logger.info("Saved GDO fomatted graph %s", analytics_meta.db_ref)
-        analytics_meta.status = "SAVED"
-        analytics_meta.end_time = datetime.now()
-        analytics_meta.save()
-
-        return True
-
-    @classmethod
-    def save_graphml(cls, graph, name, gridfs):
-        with gridfs.new_file(filename=name, content_type="text/xml") as f:
-            nx.write_graphml(graph, f)
+    ####################################################################################################################
 
     @classmethod
     def get_cursor(cls, db_col, query, schema_id, tweet_limit):
-
         cls._logger.info("Querying DATA database, collection %s with query %s", db_col.name, query)
 
-        cursor = db_col.find(query) \
-            .limit(tweet_limit) \
-            .sort(Status.SCHEMA_MAP[schema_id]["ISO_date"], pymongo.ASCENDING)
+        if tweet_limit > 0:
+            cursor = db_col.find(query) \
+                .limit(tweet_limit) \
+                .sort(Status.SCHEMA_MAP[schema_id]["ISO_date"], ASCENDING)
+        else:
+            cursor = db_col.find(query) \
+                .sort(Status.SCHEMA_MAP[schema_id]["ISO_date"], ASCENDING)
 
         cusor_size = cursor.count(with_limit_and_skip=True)
 
@@ -215,6 +52,56 @@ class Graph(object):
         return cursor
 
     @classmethod
-    def save_to_path(cls, graph, name):
-        nx.write_graphml(graph, name)
+    def finalise_graph(cls, graph, gridfs, analytics_meta, color_scheme):
+        GraphColor.color_graph(graph, color_scheme)
+        cls._logger.info("Colored graph %s", analytics_meta.id)
+        analytics_meta.status = "COLORED"
+        analytics_meta.save()
 
+        cls.export_to_gridfs(graph, analytics_meta.db_ref, gridfs)
+        cls._logger.info("Saved analytics %s", analytics_meta.db_ref)
+        analytics_meta.status = "EXPORTED"
+        analytics_meta.save()
+
+        GraphUtils.fix_graphml_format(analytics_meta.db_ref, gridfs)
+        cls._logger.info("Saved GDO fomatted graph %s", analytics_meta.db_ref)
+        analytics_meta.status = "SAVED"
+        analytics_meta.end_time = datetime.now()
+        analytics_meta.save()
+
+    @classmethod
+    def export_to_gridfs(cls, graph, name, gridfs):
+        with gridfs.new_file(filename=name, content_type="text/xml") as f:
+            write_graphml(graph, f)
+
+    @classmethod
+    def layout(cls, graph, analytics_meta, gridfs, args):
+
+        n_iterations = args["layoutIterations"]
+        if n_iterations <= 0:
+            cls._logging.info("Not laying out as number of iterations <=0")
+            return graph
+
+        cls.export_to_gridfs(graph, analytics_meta.db_ref, gridfs)
+        cls._logger.info("Exported graph ready for layout %s", analytics_meta.db_ref)
+        analytics_meta.status = "EXPORTED RAW"
+        analytics_meta.save()
+
+        GraphUtils.fix_graphml_format(analytics_meta.db_ref, gridfs)
+        cls._logger.info("Reformatted graph ready for layout %s", analytics_meta.db_ref)
+        analytics_meta.status = "REFORMAT COMPLETE"
+        analytics_meta.save()
+
+        params = {"LAYOUT_ITERATIONS": args["layoutIterations"],
+                  "LAYOUT_ALGO": args["LAYOUT_ALGO"]}
+
+        client = GephiRpcClient()
+        result = json.loads(client.call(json.dumps({"GephiParameters": params, "fileName": analytics_meta.db_ref})))
+        cls._logger.info("Result: %s", result)
+
+        cls._logger.info("Build graph %s", analytics_meta.id)
+        analytics_meta.status = "LAYOUT COMPLETE"
+        analytics_meta.save()
+
+        with gridfs.get_last_version(analytics_meta.db_ref) as f:
+            return nx.read_graphml(f)

@@ -1,5 +1,6 @@
 import logging
-from src.AnalyticsService.Graphing.GraphUtils import GraphUtils
+
+from AnalyticsService.Junk.GraphUtils import GraphUtils
 from src.AnalyticsService.TwitterObj import Status
 
 

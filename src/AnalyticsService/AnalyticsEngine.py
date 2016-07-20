@@ -1,26 +1,39 @@
 import logging
 
-from src.AnalyticsService.BasicAnalytics.Analytics import BasicAnalytics
-from src.AnalyticsService.Graphing.Graph import Graph
+from AnalyticsService.Analytics.AnalyticsGeneration import AnalyticsGeneration
+from AnalyticsService.Graphing.GraphGeneration import GraphGeneration
 
 
 class AnalyticsEngine(object):
     _logger = logging.getLogger(__name__)
 
     @classmethod
-    def get_analytics(cls, analytics_meta):
-        cls._logger.info("Attempting to run task %s", analytics_meta.type)
+    def get(cls, analytics_meta):
+        classification = analytics_meta.classification
+        cls._logger.info("Attempting to run class: %s", analytics_meta.classification)
 
-        analytics_options = {
-            "Mention_Time_Graph": Graph.get_mention_time_graph,
-            "Retweet_Time_Graph": Graph.get_retweet_time_graph,
-            "Time_Distribution": BasicAnalytics.get_time_distribution,
-            "Top_Users":BasicAnalytics.get_top_users,
-            "Basic_Stats":BasicAnalytics.get_basic_stats,
-            "Retweet_Community_Graph":Graph.get_community_retweet_graph
-        }
+        func = cls.get_options_dict().get(classification,
+                                        lambda x: cls._logger.error("Unknown type specified %s", analytics_meta.type))
 
-        analytics_constructor = analytics_options[analytics_meta.type]
-        return analytics_constructor(analytics_meta)
+        return func(analytics_meta)
+
+    @classmethod
+    def get_options(cls):
+        return [AnalyticsGeneration,
+                GraphGeneration]
+
+    @classmethod
+    def get_details(cls):
+
+        return map(lambda option: {"classification": option.get_classification(),
+                                   "types": option.get_option_details()}, cls.get_options())
+
+    @classmethod
+    def get_options_dict(cls):
+        return dict([(o.get_classification(), o.get) for o in cls.get_options()])
 
 
+#Check registered analysis options
+if __name__ == '__main__':
+    import pprint
+    pprint.pprint(AnalyticsEngine.get_details())

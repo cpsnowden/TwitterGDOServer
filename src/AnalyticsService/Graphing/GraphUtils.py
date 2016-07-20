@@ -1,15 +1,12 @@
 import logging
-import pprint
-from itertools import product
+
 from xml.etree import ElementTree
 import sys
+import numpy as np
+
 reload(sys)  # just to be sure
 sys.setdefaultencoding('utf-8')
 
-import community
-
-import networkx as nx
-import numpy as np
 from matplotlib import colors
 
 
@@ -34,6 +31,7 @@ class GraphUtils(object):
                 id = '"' + key_entry.attrib['id'] + '"'
                 replacements[id] = ('"' + key_entry.attrib['attr.name'] + '"').replace(" ", "")
 
+        with gridfs.get_last_version(name) as f:
             for line in f:
                 for src in replacements:
                     line = line.replace(src, replacements[src])
@@ -46,88 +44,10 @@ class GraphUtils(object):
         cls._logger.info("Deleting old version of file %s", f_id)
         gridfs.delete(f_id)
 
-    @staticmethod
-    def link_node_to_history(graph, history, node_id, user_id):
-
-        # Link up the user thread
-        past_user_node_id = GraphUtils.get_last_node(user_id, history)
-        if past_user_node_id is not None:
-            graph.add_edge(past_user_node_id, node_id, type="user")
-        history[user_id] = node_id
-
-    @staticmethod
-    def get_last_node(common_id, history):
-        if common_id in history:
-            return history[common_id]
-        else:
-            return None
-
-
-class GraphColor(object):
-    _logger = logging.getLogger(__name__)
-
     @classmethod
-    def color_graph(cls, graph, mapping):
+    def maximise_aspect(cls, graph):
 
-        node_map, edge_map = mapping
-
-        graph = GraphColor.color_nodes(graph, node_map)
-        graph = GraphColor.color_edges(graph, edge_map)
-
-        return graph
-
-    @staticmethod
-    def color_edges(graph, mapping):
-
-        key, color_map = mapping
-
-        for u, v, k in graph.edges(data=key):
-            GraphColor.color_element_from_rgb(graph[u][v], color_map.get(k, "grey"))
-
-        return graph
-
-    @staticmethod
-    def color_nodes(graph, mapping):
-
-        key, color_map = mapping
-        print mapping
-        for nid in graph.nodes():
-            node = graph.node[nid]
-            try:
-                t = node[key]
-            except KeyError:
-                print "Could not get key on ", node
-                t = "grey"
-            GraphColor.color_element_from_rgb(node, color_map.get(t, "grey"))
-
-        return graph
-
-    @staticmethod
-    def color_element_from_rgb(element, color):
-
-        try:
-            rgb = colors.colorConverter.to_rgb(color)
-        except ValueError:
-            rgb = (0.0, 0.0, 0.0)
-
-        element['r'], element['g'], element['b'] = [int(i * 255) for i in rgb]
-
-
-class TwitterGraphCreator:
-    analyticsMeta = None
-    graph = None
-
-    def __init__(self, analyticsMeta):
-
-        self.analyticsMeta = analyticsMeta
-
-    def load_graph(self, file_name):
-
-        self.graph = nx.read_graphml(file_name)
-
-    def rotate(self):
-
-        node_dictionary = dict(self.graph.nodes(data=True))
+        node_dictionary = dict(graph.nodes(data=True))
 
         coords = {}
         for node_id in node_dictionary.keys():
@@ -169,41 +89,58 @@ class TwitterGraphCreator:
                 best_theta = theta
                 best_coords = rotated_coords
 
+        cls._logger.info("Best theta = %d", best_theta)
+
         for node_id in best_coords:
             nc = best_coords[node_id]
             node_dictionary[node_id]["x"] = float(nc[0])
             node_dictionary[node_id]["y"] = float(nc[1])
 
-        print best_theta
+        return graph
 
-    def partition(self):
 
-        node_dictionary = dict(self.graph.nodes(data=True))
+class GraphColor(object):
+    @staticmethod
+    def color_graph(graph, mapping):
 
-        undirected = self.graph.to_undirected()
-        partition = community.best_partition(undirected, resolution=50)
+        node_map, edge_map = mapping
 
-        for com in set(partition.values()):
-            nodes = [n for n in partition.keys() if partition[n] == com]
-            for n in nodes:
-                node_dictionary[n]["partition"] = com
+        graph = GraphColor.color_nodes(graph, node_map)
+        graph = GraphColor.color_edges(graph, edge_map)
 
-        inter_partition_connection = dict(
-                (dir, 0) for dir in list(product(set(partition.values()), set(partition.values()))))
+        return graph
 
-        # pprint.pprint(inter_partition_connection)
+    @staticmethod
+    def color_edges(graph, mapping):
 
-        for n, nbrs in self.graph.adjacency_iter():
-            for nbr, ettr in nbrs.items():
-                source_partition = node_dictionary[n]["partition"]
-                destination_partition = node_dictionary[nbr]["partition"]
-                inter_partition_connection[(source_partition, destination_partition)] += 1
+        key, color_map = mapping
 
-        pprint.pprint(sorted(((v, k) for k, v in inter_partition_connection.iteritems()), reverse=True))
+        for u, v, k in graph.edges(data=key):
+            GraphColor.color_element_from_rgb(graph[u][v], color_map.get(k, "grey"))
 
-# tgc = TwitterGraphCreator(None)
-# tgc.load_graph("TCS.graphml")
-# tgc.rotate()
-# tgc.partition()
-# nx.write_graphml(tgc.graph, "Rotate.graphml")
-#
+        return graph
+
+    @staticmethod
+    def color_nodes(graph, mapping):
+
+        key, color_map = mapping
+        for nid in graph.nodes():
+            node = graph.node[nid]
+            try:
+                t = node[key]
+            except KeyError:
+                # print "Could not get key on ", node
+                t = "grey"
+            GraphColor.color_element_from_rgb(node, color_map.get(t, "grey"))
+
+        return graph
+
+    @staticmethod
+    def color_element_from_rgb(element, color):
+
+        try:
+            rgb = colors.colorConverter.to_rgb(color)
+        except ValueError:
+            rgb = (0.0, 0.0, 0.0)
+
+        element['r'], element['g'], element['b'] = [int(i * 255) for i in rgb]

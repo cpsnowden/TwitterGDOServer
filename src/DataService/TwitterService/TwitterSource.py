@@ -1,5 +1,5 @@
-from src.DataService.TwitterService.TwitterStreamer import TwitterStreamProvider
-from src.DataService.TwitterService.TwitterConsumer import RouterManager
+from DataService.TwitterService.TwitterStreamer import TwitterStreamProvider
+from DataService.TwitterService.TwitterConsumer import RouterManager
 import datetime
 from pymongo import ASCENDING
 import logging
